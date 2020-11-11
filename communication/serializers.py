@@ -32,7 +32,9 @@ class LikeDislikeSerializer(serializers.ModelSerializer):
         validated_data["user"] = self.context["request"].user
         if (
             obj_qs := self.Meta.model.objects.filter(
-                content_type=content_type, user=self.context["request"].user
+                content_type=content_type,
+                user=self.context["request"].user,
+                object_id=validated_data["object_id"],
             )
         ) :
             obj = obj_qs.first()

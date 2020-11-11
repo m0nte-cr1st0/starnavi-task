@@ -12,4 +12,5 @@ class PostSerializer(serializers.ModelSerializer):
         """."""
 
         model = Post
-        exclude = ("id",)
+        fields = "__all__"
+        read_only_fields = ("id",)

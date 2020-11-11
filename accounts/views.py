@@ -1,4 +1,4 @@
-from rest_framework import generics
+from rest_framework import generics, status
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
@@ -22,12 +22,13 @@ class RegistrationAPIView(generics.CreateAPIView):
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
         return Response(
-            {
+            data={
                 "user": UserSerializer(
                     user, context=self.get_serializer_context()
                 ).data,
                 "message": "User created successfully. Now perform Login to get your token",
-            }
+            },
+            status=status.HTTP_201_CREATED,
         )
 
 

@@ -2,23 +2,10 @@ import json
 import os
 import random
 import string
+from typing import List
 
-import django
-from django.utils.text import slugify
+import requests
 
-
-os.environ.setdefault("DJANGO_SETTINGS_MODULE", "starnavi.settings")
-django.setup()
-
-
-from django.contrib.contenttypes.models import ContentType
-
-from accounts.models import User
-from articles.models import Post
-from communication.models import LikeDislike
-
-
-content_type = ContentType.objects.get(model="post")
 
 with open("config_for_bot.json") as f:
     config = json.loads(f.read())
@@ -40,6 +27,15 @@ DOMAINS = [
     "yahoo.com",
 ]
 
+PASSWORD = "password"
+
+PROTOCOL = "http://"
+HOST = "127.0.0.1"
+PORT = "8001"
+BASE_URL = f"{PROTOCOL}{HOST}:{PORT}"
+
+os.environ["NO_PROXY"] = HOST
+
 
 def random_word(string_length: int) -> str:
     """Generate a random word"""
@@ -47,55 +43,78 @@ def random_word(string_length: int) -> str:
     return "".join(random.choice(letters) for i in range(string_length))
 
 
-users_list = []
-for user_item in range(users_count):
-    users_list.append(
-        User(
-            username=random_word(random.randint(8, 12)),
-            password=random_word(random.randint(8, 12)),
-            email=random_word(random.randint(8, 12))
-            + "@"
-            + random.choice(DOMAINS),
-        )
+def get_access_token(ind: int) -> str:
+    """Get access token from user login"""
+    response = requests.post(
+        f"{BASE_URL}/api/v1/login/",
+        json={
+            "username": f"user{ind + 1}",
+            "password": PASSWORD,
+        },
     )
-User.objects.bulk_create(users_list)
+    return response.json()["access"]
 
-posts_list = []
-for user in User.objects.all():
-    for post_item in range(random.randint(1, max_posts_count + 1)):
-        title = "".join(
-            random.choice(string.printable)
-            for ind in range(random.randint(40, 60))
-        )
-        slug = slugify(title)
-        content = "".join(
-            random.choice(string.printable)
-            for ind_2 in range(random.randint(400, 600))
-        )
-        posts_list.append(
-            Post(author=user, title=title, slug=slug, content=content)
-        )
-Post.objects.bulk_create(posts_list)
 
-actioned_posts = []
-for user in User.objects.all():
-    liked_posts = []
-    for action_item in range(max_likes_count):
-        post = random.choice(Post.objects.all())
-        if post not in liked_posts:
-            actioned_posts.append(
-                LikeDislike(
-                    content_type=content_type,
-                    object_id=post.id,
-                    user=user,
-                    vote=LikeDislike.LIKE,
-                )
+def users_create() -> None:
+    """Users create"""
+    for user_item in range(users_count):
+        response = requests.post(
+            f"{BASE_URL}/api/v1/registration/",
+            json={
+                "username": f"user{user_item+1}",
+                "password": PASSWORD,
+                "first_name": f"name{user_item + 1}",
+                "last_name": f"surname{user_item + 1}",
+            },
+        )
+        assert response.status_code == 201
+
+
+def posts_create() -> List[int]:
+    """Posts create"""
+    posts_ids = []
+    for user_item in range(users_count):
+        access_token = get_access_token(user_item)
+        for _ in range(random.randint(1, max_posts_count)):
+            title = "".join(
+                random.choice(string.printable)
+                for ind in range(random.randint(40, 60))
             )
-            liked_posts.append(post)
-LikeDislike.objects.bulk_create(actioned_posts)
+            content = "".join(
+                random.choice(string.printable)
+                for ind in range(random.randint(400, 600))
+            )
+            response = requests.post(
+                f"{BASE_URL}/api/v1/articles/create/",
+                json={
+                    "title": title,
+                    "content": content,
+                },
+                headers={"Authorization": f"Bearer {access_token}"},
+            )
+            posts_ids.append(response.json()["id"])
+            assert response.status_code == 201
+    return posts_ids
 
-print(
-    f"Created {users_count} users, "
-    f"{len(posts_list)} posts "
-    f"and {len(actioned_posts)} likes"
-)
+
+def likes_create(posts_ids: List[int]) -> None:
+    """Likes create"""
+    for user_item in range(users_count):
+        access_token = get_access_token(user_item)
+        for _ in range(max_likes_count):
+            response = requests.post(
+                f"{BASE_URL}/api/v1/communication/action/",
+                json={
+                    "vote": random.choice((-1, 1)),
+                    "content_type": "post",
+                    "object_id": random.choice(posts_ids),
+                },
+                headers={"Authorization": f"Bearer {access_token}"},
+            )
+            assert response.status_code in (201, 400)
+
+
+if __name__ == "__main__":
+    users_create()
+    ids = posts_create()
+    likes_create(ids)
