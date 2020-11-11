@@ -1,0 +1,26 @@
+version: "3"
+services:
+  postgres:
+    image: postgres:latest
+    env_file: docker/.env
+    environment:
+      POSTGRES_HOST_AUTH_METHOD: "trust"
+    ports:
+      - 5436:5432
+
+  web: &web
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    env_file: docker/.env
+    ports:
+      - 8005:8005
+    volumes:
+      - ./:/code
+    depends_on:
+      - postgres
+    working_dir: /code
+    command: >
+      bash -c "python manage.py migrate
+      && python manage.py runserver 0.0.0.0:8005"
+#
